@@ -10,41 +10,48 @@ PythonPackageUninstall::usage = "PythonPackageUninstall[name] uninstalls 'name' 
 
 Begin["`Private`"]
 
-PythonVersion[] := StringTrim[RunProcess[{"python", "-V"}, "StandardOutput"]]
-PythonPackageVersion[] := StringTrim[RunProcess[{"pip", "-V"}, "StandardOutput"]]
+$tag = "7c704567-e2f5-49a4-ba2e-cba67952b169";
 
-PythonPackageInformation[name_String] := Module[{lines, rules},
-  lines = ImportString[RunProcess[{"pip", "show", name}, "StandardOutput"], "Lines"];
+runProcess[args__] := Module[{res = RunProcess[args]},
+	If[StringQ[res], res, Throw[$Failed,$tag]]
+]
+
+PythonVersion[] := Catch[StringTrim[runProcess[{"python", "-V"}, "StandardOutput"]],$tag]
+PythonPackageVersion[] := Catch[StringTrim[runProcess[{"pip", "-V"}, "StandardOutput"]],$tag]
+
+PythonPackageInformation[name_String] := Catch[Module[{lines, rules},
+  lines = ImportString[runProcess[{"pip", "show", name}, "StandardOutput"], "Lines"];
   rules = Map[Rule @@ StringSplit[#, ": ", 2] &, lines];
   Association @@ rules
-]
+], $tag]
 
-PythonPackageList[]:=Module[{lines,rules},
-  lines=ImportString[RunProcess[{"pip","list"},"StandardOutput"],"Lines"];
+PythonPackageList[]:= Catch[Module[{lines,rules},
+  lines=ImportString[runProcess[{"pip","list"},"StandardOutput"],"Lines"];
   rules=Map[Rule@@(StringTrim/@StringSplit[#,WhitespaceCharacter..,2])&,Part[lines,3;;-1]];
   Association@@rules
-]
+],$tag]
 
-PythonPackageInstalledQ[name_String] := TrueQ[RunProcess[{"pip", "show", name}, "StandardOutput"] =!= ""]
+PythonPackageInstalledQ[name_String] := Function[{res}, res =!= $Failed && res =!= ""] @
+	Catch[runProcess[{"pip", "show", name}, "StandardOutput"],$tag]
 
 PythonPackageInstall::alreadyinstalled="The Python package \"``\" is already installed on this machine.";
-PythonPackageInstall[name_String]:=Module[{},
+PythonPackageInstall[name_String]:= Catch[Module[{},
   If[
     PythonPackageInstalledQ[name],
     Message[PythonPackageInstall::alreadyinstalled,name],
-    RunProcess[{"pip","--quiet","install",name},"StandardOutput"];
+    runProcess[{"pip","--quiet","install",name},"StandardOutput"];
     If[
       PythonPackageInstalledQ[name],
         Success["InstallationComplete",<|"MessageTemplate":>"The installation of \"`name`\" is complete.","MessageParameters"-><|"name"->name|>|>],
         Failure["InstallationFailed",<|"MessageTemplate":>"The installation of \"`name`\" failed.","MessageParameters"-><|"name"->name|>|>]
     ]
   ]
-]
+],$tag]
 
-PythonPackageUninstall[name_String, OptionsPattern[]] := Module[{},
+PythonPackageUninstall[name_String, OptionsPattern[]] := Catch[Module[{},
   If[
     PythonPackageInstalledQ[name],
-    RunProcess[{"pip", "--quiet", "uninstall", "--yes", name}, "StandardOutput"];
+    runProcess[{"pip", "--quiet", "uninstall", "--yes", name}, "StandardOutput"];
     If[
       PythonPackageInstalledQ[name],
       Failure["UninstallationFailed", <|"MessageTemplate" :> "The uninstallation of \"`name`\" failed.","MessageParameters" -> <|"name" -> name|>|>],
@@ -53,7 +60,7 @@ PythonPackageUninstall[name_String, OptionsPattern[]] := Module[{},
     ,
     Message[PythonPackageUninstall::notfound, name]
   ]
-]
+],$tag]
 
 
 End[]
